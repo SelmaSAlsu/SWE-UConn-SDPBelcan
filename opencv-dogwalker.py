@@ -5,12 +5,29 @@ import os
 import cv2 as cv
 import numpy as np
 
+# % sudo apt-get install ocl-icd-opencl-dev
+# % sudo apt-get install clinfo
+# or, if you're on mac, like me:
+# pip install pyopencl
+# brew install clinfo
+# brew install opencv
+# to check if you have it:
+# #print(cv.getBuildInformation())
+cv.ocl.setUseOpenCL(True)
+# to see if it's worked:
+# print(f"OpenCL available: {cv.ocl.haveOpenCL()}")
+
 # only works if you have GNU WGET installed. otherwise, do it manually lol
+# *** For optimization, we could find a lighter module than YOLOv4-tiny...
 os.system("wget https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4-tiny.weights") if not os.path.exists("yolov4-tiny.weights") else 0
 os.system("wget https://github.com/AlexeyAB/darknet/raw/master/cfg/yolov4-tiny.cfg") if not os.path.exists("yolov4-tiny.cfg") else 0
 os.system("wget https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names") if not os.path.exists("coco.names") else 0
 
 net = cv.dnn.readNet("yolov4-tiny.weights", "yolov4-tiny.cfg")
+
+net.setPreferableBackend(cv.dnn.DNN_BACKEND_OPENCV)  # Use OpenCV's optimized backend
+net.setPreferableTarget(cv.dnn.DNN_TARGET_OPENCL)    # Use OpenCL for target
+
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
 
@@ -20,6 +37,10 @@ cap = cv.VideoCapture(0)
 camera_active = False
 confidence_threshold = 0.5
 
+# *** ...or, we could implement frame-skipping...
+frame_counter = 0
+frame_skip = 2  # processes only every nth frame
+
 while True:
     ret, frame = cap.read()
     if not ret:
@@ -28,6 +49,11 @@ while True:
         camera_active = True
         print("camera is active and recording")
 
+    frame_counter += 1
+    if frame_counter % frame_skip != 0:
+        continue
+
+    # *** ...or we could reduce the input resolution...
     blob = cv.dnn.blobFromImage(frame, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
     net.setInput(blob)
     detections = net.forward(output_layers)
